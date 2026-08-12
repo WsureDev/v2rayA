@@ -152,7 +152,10 @@ func writeTransparentProxyRules(tmpl *Template) (err error) {
 	// 无论哪种透明代理模式，都用 nat 表的 REDIRECT 将 DNS 流量（:53）转到 DNS 模块（:52353）。
 	// 同时拦截 OUTPUT（本地进程）和 PREROUTING（LAN 设备）的 DNS 查询。
 	// TPROXY 模式对回环（loopback）流量的 TPROXY 拦截不可靠，而 REDIRECT 在 OUTPUT 链上稳定。
-	if ShouldLocalDnsListen() {
+	// Redirect installs its DNS_REDIRECT chain together with the TCP rules.
+	// Adding the generic direct REDIRECT rules as well makes the dedicated
+	// chain unreachable and creates duplicate hooks on every restart.
+	if ShouldLocalDnsListen() && setting.TransparentType != configure.TransparentRedirect {
 		dnsRedirect := `
 iptables -w 2 -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-port 52353
 iptables -w 2 -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-port 52353

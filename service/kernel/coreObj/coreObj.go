@@ -287,6 +287,7 @@ type Sockopt struct {
 	Tos         *int    `json:"tos,omitempty"`
 	TCPFastOpen *bool   `json:"tcpFastOpen,omitempty"`
 	Tproxy      *string `json:"tproxy,omitempty"`
+	V6Only      bool    `json:"v6only,omitempty"`
 }
 type Mux struct {
 	Enabled     bool `json:"enabled"`

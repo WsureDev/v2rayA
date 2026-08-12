@@ -57,8 +57,27 @@ func (t *Template) setDualStack() {
 		if tag == "transparent" && t.Setting.TransparentType == configure.TransparentRedirect {
 			// https://ipset.netfilter.org/iptables-extensions.man.html#lbDK
 			// REDIRECT rewrites the destination to the primary address of the incoming interface,
-			// so the inbound must stay at 0.0.0.0.
-			inbounds6[i].Tag = "THIS_IS_A_DROPPED_TAG"
+			// so IPv4 must listen on 0.0.0.0. When IPv6 is enabled, use a separate
+			// v6-only wildcard socket; otherwise an [::] dual-stack socket can
+			// conflict with the IPv4 listener on Linux.
+			t.Inbounds[i].Listen = "0.0.0.0"
+			if iptables.IsIPv6Supported() {
+				inbounds6[i].Listen = "::"
+				if inbounds6[i].StreamSettings == nil {
+					inbounds6[i].StreamSettings = new(coreObj.StreamSettings)
+				}
+				if inbounds6[i].StreamSettings.Sockopt == nil {
+					inbounds6[i].StreamSettings.Sockopt = new(coreObj.Sockopt)
+				}
+				inbounds6[i].StreamSettings.Sockopt.V6Only = true
+				if tag != "" {
+					tagMap[tag] = struct{}{}
+					t.Inbounds[i].Tag += tag4Suffix
+					inbounds6[i].Tag += tag6Suffix
+				}
+			} else {
+				inbounds6[i].Tag = "THIS_IS_A_DROPPED_TAG"
+			}
 			continue
 		}
 		if tag == "dns-in" {

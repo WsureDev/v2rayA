@@ -1,0 +1,59 @@
+ARG V2RAYA_BASE_IMAGE=mzz2017/v2raya@sha256:225571b3075459a7115b3180eac78fc9cc64e3b5fd861910f23c5145429affa5
+
+FROM node:24-alpine AS web-builder
+WORKDIR /src/gui
+COPY gui/ ./
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
+    yarn install --frozen-lockfile --ignore-engines
+RUN OUTPUT_DIR=/out yarn build
+
+FROM golang:1.26-alpine AS go-builder
+RUN apk add --no-cache ca-certificates git
+WORKDIR /src/v2rayA
+COPY . ./
+COPY --from=web-builder /out/ ./service/server/router/web/
+
+ARG TARGETARCH
+ARG BUILD_VERSION=2.4.11
+ARG V2RAYA_REF=1550d843d02b1ad8dd7b832197ba7d97f59d27fe
+ARG XRAY_REF=7d214f8b094f75322fa3990f8aadad1c912f24f5
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
+RUN test "$(cat XRAY_VERSION)" = "${XRAY_REF}"
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd service && \
+    go test -c -o /tmp/iptables.test ./kernel/iptables && \
+    /tmp/iptables.test && \
+    go test -c -o /tmp/v2ray.test ./kernel/v2ray && \
+    /tmp/v2ray.test
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd core && CGO_ENABLED=0 go build -trimpath \
+      -ldflags="-X main.Version=${BUILD_VERSION} -s -w -buildid=" \
+      -o /out/v2raya_core ./main
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    build_tags=""; \
+    case "${TARGETARCH}" in amd64|arm64) build_tags="-tags=tinytun" ;; esac; \
+    cd service; \
+    CGO_ENABLED=0 go build -trimpath ${build_tags} \
+      -ldflags="-X github.com/v2rayA/v2rayA/conf.Version=${BUILD_VERSION} -s -w -buildid=" \
+      -o /out/v2raya .
+
+FROM ${V2RAYA_BASE_IMAGE} AS runtime
+ARG BUILD_VERSION=2.4.11
+ARG V2RAYA_REF=1550d843d02b1ad8dd7b832197ba7d97f59d27fe
+ARG XRAY_REF=7d214f8b094f75322fa3990f8aadad1c912f24f5
+LABEL org.opencontainers.image.title="WsureDev v2rayA Xray redirect build" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      org.opencontainers.image.revision="${V2RAYA_REF}" \
+      org.opencontainers.image.source="https://github.com/WsureDev/v2rayA" \
+      io.v2raya.xray.revision="${XRAY_REF}" \
+      io.v2raya.redirect.compat="source-patched"
+COPY --from=go-builder /out/v2raya /usr/bin/v2raya
+COPY --from=go-builder /out/v2raya_core /usr/bin/v2raya_core
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:2017/ || exit 1

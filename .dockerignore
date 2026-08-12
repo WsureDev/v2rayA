@@ -1,6 +1,6 @@
 **/v2rayA_*
 **/.idea
 **/.vscode
-**/*.test.go
+**/.git
 **/.tr
 **/node_modules/**

@@ -76,12 +76,8 @@ iptables -w 2 -t nat -A TP_RULE -d 240.0.0.0/4 -j RETURN
 iptables -w 2 -t nat -A TP_RULE -m mark --mark 0x80/0x80 -j RETURN
 # DNS 重定向到新 DNS 模块端口 52353（必须在通用 REDIRECT 规则之前）
 iptables -w 2 -t nat -A DNS_REDIRECT -m mark --mark 0x80/0x80 -j RETURN
-iptables -w 2 -t nat -A DNS_REDIRECT -j REDIRECT --to-port 52353
-# 在 PREROUTING 和 OUTPUT 中插入 DNS 规则（优先于 TP_PRE/TP_OUT）
-iptables -w 2 -t nat -I PREROUTING -p udp --dport 53 -j DNS_REDIRECT
-iptables -w 2 -t nat -I PREROUTING -p tcp --dport 53 -j DNS_REDIRECT
-iptables -w 2 -t nat -I OUTPUT -p udp --dport 53 -j DNS_REDIRECT
-iptables -w 2 -t nat -I OUTPUT -p tcp --dport 53 -j DNS_REDIRECT
+iptables -w 2 -t nat -A DNS_REDIRECT -p udp -j REDIRECT --to-port 52353
+iptables -w 2 -t nat -A DNS_REDIRECT -p tcp -j REDIRECT --to-port 52353
 `
 	for _, v := range GetExcludedInterfaces() {
 		commands += fmt.Sprintf("iptables -w 2 -t nat -A TP_RULE -i %s -j RETURN\n", strings.ReplaceAll(v, "*", "+"))
@@ -103,6 +99,12 @@ iptables -w 2 -t nat -I PREROUTING -p tcp -j TP_PRE
 iptables -w 2 -t nat -I OUTPUT -p tcp -j TP_OUT
 iptables -w 2 -t nat -A TP_PRE -j TP_RULE
 iptables -w 2 -t nat -A TP_OUT -j TP_RULE
+# -I always inserts at rule 1, so install these after the generic TCP hooks.
+# This guarantees TCP/53 reaches the DNS module instead of port 52345.
+iptables -w 2 -t nat -I PREROUTING -p udp --dport 53 -j DNS_REDIRECT
+iptables -w 2 -t nat -I PREROUTING -p tcp --dport 53 -j DNS_REDIRECT
+iptables -w 2 -t nat -I OUTPUT -p udp --dport 53 -j DNS_REDIRECT
+iptables -w 2 -t nat -I OUTPUT -p tcp --dport 53 -j DNS_REDIRECT
 `
 	if IsIPv6Supported() {
 		commands += `
@@ -111,11 +113,8 @@ ip6tables -w 2 -t nat -N TP_PRE
 ip6tables -w 2 -t nat -N TP_RULE
 ip6tables -w 2 -t nat -N DNS_REDIRECT
 ip6tables -w 2 -t nat -A DNS_REDIRECT -m mark --mark 0x80/0x80 -j RETURN
-ip6tables -w 2 -t nat -A DNS_REDIRECT -j REDIRECT --to-port 52353
-ip6tables -w 2 -t nat -I PREROUTING -p udp --dport 53 -j DNS_REDIRECT
-ip6tables -w 2 -t nat -I PREROUTING -p tcp --dport 53 -j DNS_REDIRECT
-ip6tables -w 2 -t nat -I OUTPUT -p udp --dport 53 -j DNS_REDIRECT
-ip6tables -w 2 -t nat -I OUTPUT -p tcp --dport 53 -j DNS_REDIRECT
+ip6tables -w 2 -t nat -A DNS_REDIRECT -p udp -j REDIRECT --to-port 52353
+ip6tables -w 2 -t nat -A DNS_REDIRECT -p tcp -j REDIRECT --to-port 52353
 ip6tables -w 2 -t nat -A TP_RULE -d ::/128 -j RETURN
 ip6tables -w 2 -t nat -A TP_RULE -d ::1/128 -j RETURN
 ip6tables -w 2 -t nat -A TP_RULE -d 64:ff9b::/96 -j RETURN
@@ -150,6 +149,11 @@ ip6tables -w 2 -t nat -I PREROUTING -p tcp -j TP_PRE
 ip6tables -w 2 -t nat -I OUTPUT -p tcp -j TP_OUT
 ip6tables -w 2 -t nat -A TP_PRE -j TP_RULE
 ip6tables -w 2 -t nat -A TP_OUT -j TP_RULE
+# Keep DNS ahead of the generic TCP hooks (see the IPv4 rules above).
+ip6tables -w 2 -t nat -I PREROUTING -p udp --dport 53 -j DNS_REDIRECT
+ip6tables -w 2 -t nat -I PREROUTING -p tcp --dport 53 -j DNS_REDIRECT
+ip6tables -w 2 -t nat -I OUTPUT -p udp --dport 53 -j DNS_REDIRECT
+ip6tables -w 2 -t nat -I OUTPUT -p tcp --dport 53 -j DNS_REDIRECT
 `
 	}
 	return Setter{

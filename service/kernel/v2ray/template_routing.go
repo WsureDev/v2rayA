@@ -496,15 +496,26 @@ func (t *Template) setTransparentRouting() (err error) {
 	return nil
 }
 func (t *Template) AppendDokodemoTProxy(tproxy string, port int, tag string) {
+	listen := "127.0.0.1"
+	network := "tcp,udp"
+	if tproxy == string(configure.TransparentRedirect) {
+		// REDIRECT rewrites packets to an address on the receiving interface.
+		// A loopback-only listener therefore works for local OUTPUT traffic but
+		// rejects forwarded/LAN traffic arriving through PREROUTING.
+		listen = "0.0.0.0"
+		// v2rayA's REDIRECT data path intentionally handles TCP only. DNS has a
+		// dedicated TCP/UDP listener on port 52353.
+		network = "tcp"
+	}
 	dokodemo := coreObj.Inbound{
-		Listen:   "127.0.0.1",
+		Listen:   listen,
 		Port:     port,
 		Protocol: "dokodemo-door",
 		Sniffing: coreObj.Sniffing{
 			Enabled:      true,
 			DestOverride: []string{"http", "tls"},
 		},
-		Settings: &coreObj.InboundSettings{Network: "tcp,udp"},
+		Settings: &coreObj.InboundSettings{Network: network},
 		Tag:      tag,
 	}
 	dokodemo.StreamSettings = &coreObj.StreamSettings{Sockopt: &coreObj.Sockopt{Tproxy: &tproxy}}

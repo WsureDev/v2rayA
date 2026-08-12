@@ -1,0 +1,29 @@
+name: v2raya-xray
+
+services:
+  v2raya-xray:
+    image: ${IMAGE_NAME:-local/v2raya-xray:2.4.11-xray-7d214f8}
+    build:
+      context: .
+      dockerfile: Dockerfile.xray-redirect
+      args:
+        BUILD_VERSION: 2.4.11
+        V2RAYA_REF: 1550d843d02b1ad8dd7b832197ba7d97f59d27fe
+        XRAY_REF: 7d214f8b094f75322fa3990f8aadad1c912f24f5
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    container_name: v2raya-xray
+    privileged: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      V2RAYA_LOG_LEVEL: ${V2RAYA_LOG_LEVEL:-info}
+      V2RAYA_LOG_FILE: /etc/v2raya/v2raya.log
+      V2RAYA_IPV6_SUPPORT: ${V2RAYA_IPV6_SUPPORT:-off}
+    ports:
+      - "2018:2017"
+      - "20180:20170"
+      - "20181:20171"
+      - "20182:20172"
+    volumes:
+      - ${V2RAYA_DATA_DIR:-./data}:/etc/v2raya
